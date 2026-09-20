@@ -34,6 +34,59 @@ const ANDURIL: EquityAsset = {
   source: 'prestocks.com/api/prestocks (snapshot 2026-09-20)',
 };
 
+/** Fund the deployer from the devnet faucet with retries.
+ *  The public faucet is flaky ("Internal error") and rate-limited, so we try
+ *  progressively smaller amounts with growing waits between attempts. */
+async function fundDeployer(
+  connection: Connection,
+  deployer: Keypair
+): Promise<void> {
+  const bal = await connection.getBalance(deployer.publicKey);
+  if (bal >= 1_000_000_000) {
+    console.log('deployer already funded:', bal / 1e9, 'SOL');
+    return;
+  }
+  const attempts = [
+    1_000_000_000, 1_000_000_000, 500_000_000, 500_000_000, 500_000_000,
+  ];
+  for (let i = 0; i < attempts.length; i++) {
+    try {
+      console.log(
+        `airdrop attempt ${i + 1}/${attempts.length}: requesting ${
+          attempts[i] / 1e9
+        } SOL...`
+      );
+      const sig = await connection.requestAirdrop(
+        deployer.publicKey,
+        attempts[i]
+      );
+      await connection.confirmTransaction(sig, 'confirmed');
+      const nb = await connection.getBalance(deployer.publicKey);
+      console.log('airdrop landed, balance now:', nb / 1e9, 'SOL');
+      if (nb >= 1_000_000_000) return;
+    } catch (e) {
+      console.log(
+        `airdrop attempt ${i + 1} failed:`,
+        (e as Error).message?.slice(0, 140)
+      );
+    }
+    if (i < attempts.length - 1) {
+      const wait = 20000 * (i + 1);
+      console.log(`waiting ${wait / 1000}s before next attempt...`);
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+  const final = await connection.getBalance(deployer.publicKey);
+  if (final < 1_000_000_000) {
+    throw new Error(
+      `devnet faucet would not fund the deployer (balance ${
+        final / 1e9
+      } SOL after ${attempts.length} attempts). ` +
+        `Fund ${deployer.publicKey.toBase58()} manually at https://faucet.solana.com (devnet) and re-run.`
+    );
+  }
+}
+
 /** Deployer: DEPLOYER_KEYPAIR env (base58 or JSON array) or fresh + airdrop. */
 function loadDeployer(): Keypair {
   const raw = process.env.DEPLOYER_KEYPAIR?.trim();
@@ -56,17 +109,10 @@ async function main() {
   const connection = new Connection(DEVNET, 'confirmed');
   const client = new DynamicBondingCurveClient(connection, 'confirmed');
 
-  // 1. Deployer (devnet = free).
+  // 1. Deployer (devnet = free) + faucet funding with retries.
   const deployer = loadDeployer();
   console.log('deployer:', deployer.publicKey.toBase58());
-  const bal = await connection.getBalance(deployer.publicKey);
-  if (bal < 1_000_000_000) {
-    const sig = await connection.requestAirdrop(deployer.publicKey, 2_000_000_000);
-    await connection.confirmTransaction(sig, 'confirmed');
-    console.log('airdrop confirmed');
-  } else {
-    console.log('deployer already funded:', bal / 1e9, 'SOL');
-  }
+  await fundDeployer(connection, deployer);
 
   // 2. Build the fair-value-anchored curve.
   const build = buildEquityCurve({

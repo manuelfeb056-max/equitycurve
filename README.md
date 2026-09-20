@@ -48,17 +48,19 @@ On top of the curve:
 - The "Monitor" step reads live pool state (reserves, sqrt price, threshold)
   via `client.state.getPool` / `getPoolConfig`.
 
-## Verified on devnet
+## Devnet deployment
 
-A real pool was deployed on Solana devnet (faucet SOL, $0):
+`scripts/deploy-devnet.ts` deploys a real pool on Solana devnet (faucet SOL,
+$0) via GitHub Actions (workflow `devnet-deploy`): config + pool + mint in one
+`createConfigAndPool` transaction. The pool address and transaction are shown
+in the app after deployment.
+
+SDK simulation sanity (local, `npx tsx scripts/simulate.ts`, 120 steps) for
+the ANDURIL demo config:
 
 - Curve: start $148.98 → anchor $153.58 → migration $167.16
 - Float: 623 tokens · migration split: 48.4% · threshold: 249.9 SOL ≈ $49,981
-- 120-step SDK simulation sanity: PASS (fills $149.08 → $156.31 → $167.16,
-  avg execution $156.68)
-
-Pool address and transaction are shown in the app after deployment
-(`scripts/deploy-devnet.ts` also deploys headlessly via GitHub Actions).
+- 120-step fills $149.08 → $156.31 → $167.16, avg execution $156.68: PASS
 
 ## What changes on mainnet
 
