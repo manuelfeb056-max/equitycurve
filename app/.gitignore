@@ -1,0 +1,4 @@
+node_modules/
+dist/
+scripts/.devnet-deploy.json
+.DS_Store
